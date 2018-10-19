@@ -3,6 +3,7 @@ package es
 import (
 	"github.com/olivere/elastic"
 	"log"
+	"reflect"
 	"testing"
 	"time"
 
@@ -196,6 +197,20 @@ func TestCreateEventDoc(t *testing.T) {
 	handler := &esHandler{esClient: esClient}
 	err := handler.AddDoc(eventIndex, "_doc", evnt)
 	assert.Nil(t, err)
+}
+
+func TestEsHandler_SearchSortByCreateTime(t *testing.T) {
+	esClient := esclient.NewESClient()
+	handler := &esHandler{esClient: esClient}
+	res, err := handler.SearchSortByCreateTime("msg", 10)
+	assert.Nil(t, err)
+
+	for _, m := range res.Each(reflect.TypeOf(&msg{})) {
+		v, ok := m.(*msg)
+		if ok {
+			log.Println(v.Author, v.Content, v.CreateTime)
+		}
+	}
 }
 
 func TestSearch(t *testing.T) {

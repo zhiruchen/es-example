@@ -2,7 +2,6 @@ package es
 
 import (
 	"context"
-
 	"github.com/olivere/elastic"
 )
 
@@ -46,6 +45,17 @@ func (h *esHandler) Search(index string, termQuery *elastic.TermQuery, sortField
 	}
 
 	return searchResult, nil
+}
+
+func (h *esHandler) SearchSortByCreateTime(index string, size int) (*elastic.SearchResult, error) {
+	searchResult, err := h.esClient.Search().
+		Index(index).
+		Sort("create_time", false).
+		From(0).Size(size).
+		Pretty(true).
+		Do(context.Background())
+
+	return searchResult, err
 }
 
 func (h *esHandler) DeleteIndex(index ...string) error {
