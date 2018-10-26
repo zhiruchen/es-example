@@ -3,6 +3,7 @@ package es
 import (
 	"context"
 	"github.com/olivere/elastic"
+	"strconv"
 )
 
 type esHandler struct {
@@ -56,6 +57,69 @@ func (h *esHandler) SearchSortByCreateTime(index string, size int) (*elastic.Sea
 		Do(context.Background())
 
 	return searchResult, err
+}
+
+type swipeQueryReq struct {
+	index, eventName            string
+	latitude, longitude, radius float64
+}
+
+func (h *esHandler) AggSearch(q *swipeQueryReq) ([]string, error) {
+	distance := elastic.NewGeoDistanceQuery("location")
+	distance.Distance(strconv.Itoa(int(q.radius)) + "m")
+	distance.Point(q.latitude, q.longitude)
+	querys := []elastic.Query{
+		elastic.NewTermQuery("event_name", q.eventName),
+		distance,
+	}
+	boolQuery := elastic.NewBoolQuery().Filter(querys...)
+
+	maxAgg := elastic.NewMaxAggregation().Field("create_time")
+	termsAgg := elastic.NewTermsAggregation().Field("user_id").OrderByAggregation("neartime", false)
+	termsAgg = termsAgg.SubAggregation("neartime", maxAgg)
+
+	searchResult, err := h.esClient.Search().
+		Index(q.index).
+		Query(boolQuery).
+		Aggregation("user_ids", termsAgg).
+		From(0).Size(1000).
+		Do(context.Background())
+
+	// return searchResult, err
+
+	//results, err := elasticsearch.DefaultClient.Search(&elasticsearch.ComplexQuery{
+	//	Context: elasticsearch.QueryContext{
+	//		Index:    "swipe",
+	//		ItemType: "_doc",
+	//	},
+	//	Query:       elastic.NewFunctionScoreQuery().Query(boolQuery),
+	//	Size:        int64(q.size),
+	//	AggsName:    "merchant_ids",
+	//	Aggregation: termsAgg,
+	//},
+	//	elasticsearch.Timeout("500ms"),
+	//)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	rawRes := searchResult.Aggregations
+	userIds, found := rawRes.Terms("user_ids")
+	if !found {
+		return nil, err
+	}
+
+	var uids []string
+	for _, b := range userIds.Buckets {
+		uid, ok := b.Key.(string)
+		if !ok {
+			continue
+		}
+
+		uids = append(uids, uid)
+	}
+
+	return uids, nil
 }
 
 func (h *esHandler) DeleteIndex(index ...string) error {
