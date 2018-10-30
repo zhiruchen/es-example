@@ -2,8 +2,9 @@ package es
 
 import (
 	"context"
-	"github.com/olivere/elastic"
 	"strconv"
+
+	"github.com/olivere/elastic"
 )
 
 type esHandler struct {
@@ -120,6 +121,22 @@ func (h *esHandler) AggSearch(q *swipeQueryReq) ([]string, error) {
 	}
 
 	return uids, nil
+}
+
+func (h *esHandler) ScriptSearch(index string) (*elastic.SearchResult, error) {
+	scriptFilter := elastic.NewScript(`doc['tags'].values.length > 0 && doc['tags'].values[0] != ""`).
+		Lang("painless")
+	baseFilter := []elastic.Query{
+		elastic.NewScriptQuery(scriptFilter),
+	}
+
+	boolQuery := elastic.NewBoolQuery().Should(elastic.NewBoolQuery().Filter(baseFilter...))
+	searchResult, err := h.esClient.Search().
+		Index(index).
+		Query(boolQuery).
+		From(0).Size(1000).
+		Do(context.Background())
+	return searchResult, err
 }
 
 func (h *esHandler) DeleteIndex(index ...string) error {

@@ -1,12 +1,12 @@
 package es
 
 import (
-	"github.com/olivere/elastic"
 	"log"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/olivere/elastic"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/zhiruchen/es-example/esclient"
@@ -111,6 +111,26 @@ var (
 		}
 	}
 `
+	arrayMapping = `
+	{
+		"settings":{
+			"number_of_shards":1,
+			"number_of_replicas":0
+		},
+		"mappings":{
+			"_doc":{
+				"properties":{
+					"user_id": {
+						"type":"keyword"
+					},
+					"tags": {
+						"type":"keyword"
+					}
+				}
+			}
+		}
+	}
+`
 )
 
 type user struct {
@@ -142,6 +162,11 @@ type swipe struct {
 	EventName  string            `json:"event_name"`
 	Location   *elastic.GeoPoint `json:"location"`
 	CreateTime time.Time         `json:"create_time"`
+}
+
+type arrayData struct {
+	UserId string   `json:"user_id"`
+	Tags   []string `json:"tags"`
 }
 
 func TestCreateIndex(t *testing.T) {
@@ -341,6 +366,48 @@ func TestEsHandler_SearchSortByCreateTime(t *testing.T) {
 	}
 }
 
-func TestSearch(t *testing.T) {
+func TestCreateArrayMapping(t *testing.T) {
+	esClient := esclient.NewESClient()
+	handler := &esHandler{esClient: esClient}
+	err := handler.CreateIndex("myarray", arrayMapping)
+	assert.Nil(t, err)
+}
 
+func TestAddArrayDataDoc(t *testing.T) {
+	esClient := esclient.NewESClient()
+	handler := &esHandler{esClient: esClient}
+	d := arrayData{
+		UserId: "uid1",
+		Tags:   []string{"1", "2", "3"},
+	}
+
+	assert.Nil(t, handler.AddDoc("myarray", "_doc", d))
+
+	d = arrayData{
+		UserId: "uid2",
+		Tags:   []string{""},
+	}
+	assert.Nil(t, handler.AddDoc("myarray", "_doc", d))
+
+	d = arrayData{
+		UserId: "uid3",
+		Tags:   []string{"a", "b"},
+	}
+	assert.Nil(t, handler.AddDoc("myarray", "_doc", d))
+}
+
+func TestEsHandler_ScriptSearch(t *testing.T) {
+	esClient := esclient.NewESClient()
+	handler := &esHandler{esClient: esClient}
+	res, err := handler.ScriptSearch("myarray")
+	assert.Nil(t, err)
+	for _, v := range res.Each(reflect.TypeOf(&arrayData{})) {
+		a, ok := v.(*arrayData)
+		if ok {
+			log.Println(a.UserId, a.Tags)
+		}
+	}
+}
+
+func TestSearch(t *testing.T) {
 }
